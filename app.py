@@ -4,16 +4,25 @@ from PIL import Image
 import re
 import os
 
-# --- STABLE PRODUCTION IMPORTS (2026) ---
+# --- ROBUST PRODUCTION IMPORTS (MARCH 2026) ---
+# We use a multi-path import for 'pull' to handle all possible library versions
+try:
+    from langchainhub import pull
+except ImportError:
+    try:
+        from langchain.hub import pull
+    except ImportError:
+        # Final fallback for langchain-classic users
+        from langchain_classic.hub import pull
+
 from langchain_classic.agents import AgentExecutor, create_react_agent
-from langchainhub import pull  # Standard for March 2026
 from langchain_core.tools import Tool
 from langchain_openai import ChatOpenAI
 
-# --- CUSTOM FINANCE TOOLS (Optimized from your Notebook) ---
+# --- CUSTOM FINANCE TOOLS ---
 
 def ocr_tool(image_file):
-    """Step 1: Extract text from the payment screenshot."""
+    """Step 1: Extract text from the image."""
     img = Image.open(image_file)
     text = pytesseract.image_to_string(img)
     return text
@@ -36,39 +45,40 @@ def expense_tool(text):
     return f"Amount: ₹{amount}, Category: {category}"
 
 def advice_tool(category):
-    """Step 3: Provide advice based on the transaction category."""
+    """Step 3: Provide advice based on the category."""
     advice_map = {
-        "Food": "Consider cooking at home more often to save on delivery fees.",
-        "Transport": "Look into monthly passes if you travel this route daily.",
-        "Shopping": "Check if this was a need or a want before your next purchase.",
-        "Others": "Keep an eye on these miscellaneous costs."
+        "Food": "Consider cooking at home to save on delivery fees.",
+        "Transport": "Check if a monthly pass or public transport is cheaper.",
+        "Shopping": "Ask yourself if this was a 'need' or a 'want' before buying.",
+        "Others": "Keep tracking these to see where small leaks occur."
     }
-    return advice_map.get(category, "Regularly review your spending habits.")
+    return advice_map.get(category, "Always review your expenses weekly.")
 
 # --- STREAMLIT UI ---
 
 st.set_page_config(page_title="AI Finance Agent", page_icon="🏦")
 st.title("🏦 AI Finance Agent")
-st.markdown("Analyze your payment screenshots and get instant financial advice.")
+st.markdown("Upload a payment screenshot to get analysis and advice.")
 
-# Secure API Key Entry in Sidebar
-api_key = st.sidebar.text_input("Enter OpenAI API Key", type="password")
+# Secure API Key Entry
+api_key = st.sidebar.text_input("OpenAI API Key", type="password")
 
 if not api_key:
     st.info("Please enter your OpenAI API Key in the sidebar to start.", icon="🗝️")
 else:
-    # 1. Initialize Modern LLM
+    # 1. Initialize LLM
     llm = ChatOpenAI(model="gpt-3.5-turbo", temperature=0, openai_api_key=api_key)
 
-    # 2. Define Tools using Notebook Logic
+    # 2. Define Tools
     tools = [
-        Tool(name="OCR_Tool", func=ocr_tool, description="Use this to extract text from images."),
-        Tool(name="Expense_Analyzer", func=expense_tool, description="Detects amount and category."),
+        Tool(name="OCR_Tool", func=ocr_tool, description="Extracts text from images."),
+        Tool(name="Expense_Analyzer", func=expense_tool, description="Finds amount and category from text."),
         Tool(name="Financial_Advisor", func=advice_tool, description="Provides advice for a category.")
     ]
 
-    # 3. Setup Agent (Using pull and create_react_agent)
+    # 3. Setup Agent
     try:
+        # pull() is now imported directly from the top section
         prompt = pull("hwchase17/react")
         agent = create_react_agent(llm, tools, prompt)
         agent_executor = AgentExecutor(
@@ -78,22 +88,22 @@ else:
             handle_parsing_errors=True
         )
     except Exception as e:
-        st.error(f"Failed to initialize Agent: {e}")
+        st.error(f"Error loading Agent: {e}")
 
-    # 4. File Upload and Execution
-    uploaded_file = st.file_uploader("Upload screenshot (JPG, PNG)", type=["jpg", "png", "jpeg"])
+    # 4. App Logic
+    uploaded_file = st.file_uploader("Upload screenshot", type=["jpg", "png", "jpeg"])
 
     if uploaded_file:
-        st.image(uploaded_file, caption="Uploaded Image", use_container_width=True)
+        st.image(uploaded_file, caption="Target Screenshot", use_container_width=True)
         
-        if st.button("Run Financial Analysis"):
-            with st.spinner("Agent is analyzing..."):
+        if st.button("Analyze Spend"):
+            with st.spinner("Agent is working..."):
                 try:
-                    # Pass the file object directly to the agent's chain
+                    # Invoke the agent executor
                     result = agent_executor.invoke({
-                        "input": f"Analyze this image: {uploaded_file}. Tell me the spend amount, category, and advice."
+                        "input": f"Use your tools to analyze this image: {uploaded_file}. Summarize spend, category, and advice."
                     })
-                    st.success("### Analysis Result")
+                    st.success("### Analysis Complete")
                     st.write(result["output"])
                 except Exception as e:
                     st.error(f"Execution Error: {e}")
