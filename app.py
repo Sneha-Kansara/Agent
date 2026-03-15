@@ -4,36 +4,32 @@ from PIL import Image
 import re
 import os
 
-# --- MODERN LANGCHAIN IMPORTS ---
-try:
-    from langchain.agents import AgentExecutor, create_react_agent
-except ImportError:
-    from langchain.agents.agent import AgentExecutor
-    from langchain.agents.react.agent import create_react_agent
-
+# --- STABLE PRODUCTION IMPORTS (2026) ---
+# We use 'langchain_classic' to guarantee the AgentExecutor works on Streamlit Cloud
+from langchain_classic.agents import AgentExecutor, create_react_agent
 from langchain import hub
 from langchain_core.tools import Tool
 from langchain_openai import ChatOpenAI
 
-# --- CUSTOM TOOLS (Extracted from your notebook) ---
+# --- CUSTOM FINANCE TOOLS ---
 
 def ocr_tool(image_file):
-    """Extracts text from a payment screenshot."""
+    """Step 1: Extract text from the uploaded screenshot."""
     img = Image.open(image_file)
     text = pytesseract.image_to_string(img)
     return text
 
 def expense_tool(text):
-    """Detects amount and category from transaction text."""
+    """Step 2: Parse text for amount and category."""
     amount_match = re.search(r'\d+', text)
     amount = amount_match.group() if amount_match else "Unknown"
     
-    text = text.lower()
-    if "swiggy" in text or "zomato" in text:
+    text_lower = text.lower()
+    if any(k in text_lower for k in ["swiggy", "zomato", "food", "restaurant"]):
         category = "Food"
-    elif "uber" in text or "ola" in text:
+    elif any(k in text_lower for k in ["uber", "ola", "transport", "ride"]):
         category = "Transport"
-    elif "amazon" in text or "flipkart" in text:
+    elif any(k in text_lower for k in ["amazon", "flipkart", "shopping", "order"]):
         category = "Shopping"
     else:
         category = "Others"
@@ -41,73 +37,56 @@ def expense_tool(text):
     return f"Amount: ₹{amount}, Category: {category}"
 
 def advice_tool(category):
-    """Provides financial advice based on the detected category."""
-    advice = {
-        "Food": "Reduce food delivery spending and cook more at home.",
-        "Transport": "Consider public transport to save money.",
-        "Shopping": "Avoid impulse buying and track your purchases.",
-        "Others": "Review your expenses regularly."
+    """Step 3: Provide advice based on the category."""
+    advice_map = {
+        "Food": "Try to reduce dining out to save 20% more this month.",
+        "Transport": "Check if public transport or carpooling is an option.",
+        "Shopping": "Wait 24 hours before making non-essential purchases.",
+        "Others": "Keep tracking these 'Others' to find hidden leaks in your budget."
     }
-    return advice.get(category, "Track your spending regularly.")
+    return advice_map.get(category, "Review this expense to see if it's necessary.")
 
-# --- STREAMLIT UI SETUP ---
+# --- STREAMLIT UI ---
 
-st.set_page_config(page_title="AI Finance Agent", page_icon="💰")
-st.title("💰 AI Finance Agent")
-st.write("Upload a payment screenshot to analyze your spending.")
+st.set_page_config(page_title="AI Finance Agent", page_icon="🏦")
+st.title("🏦 AI Finance Agent")
+st.markdown("Upload your payment screenshots (UPI, Bank, etc.) for instant analysis.")
 
-# Secure API Key Input
-openai_api_key = st.sidebar.text_input("Enter OpenAI API Key", type="password")
+# Secure API Key Entry
+api_key = st.sidebar.text_input("OpenAI API Key", type="password")
 
-if not openai_api_key:
-    st.info("Please add your OpenAI API key to the sidebar to continue.", icon="🗝️")
+if not api_key:
+    st.info("Please enter your OpenAI API Key in the sidebar to start.", icon="🗝️")
 else:
-    # Initialize the Modern LLM
-    llm = ChatOpenAI(model="gpt-3.5-turbo", temperature=0, openai_api_key=openai_api_key)
+    # 1. Initialize LLM
+    llm = ChatOpenAI(model="gpt-3.5-turbo", temperature=0, openai_api_key=api_key)
 
-    # Define Tools for the Agent
+    # 2. Define Tools
     tools = [
-        Tool(
-            name="OCR_Tool", 
-            func=ocr_tool, 
-            description="Use this first to extract text from a payment screenshot image."
-        ),
-        Tool(
-            name="Expense_Analyzer", 
-            func=expense_tool, 
-            description="Use this to detect the amount and category from extracted text."
-        ),
-        Tool(
-            name="Financial_Advisor", 
-            func=advice_tool, 
-            description="Use this to provide financial advice based on a category."
-        )
+        Tool(name="OCR_Tool", func=ocr_tool, description="Extracts text from images."),
+        Tool(name="Expense_Analyzer", func=expense_tool, description="Finds amount and category from text."),
+        Tool(name="Financial_Advisor", func=advice_tool, description="Provides advice for a category.")
     ]
 
-    # Initialize Modern Agent Logic
+    # 3. Setup Agent
     prompt = hub.pull("hwchase17/react")
     agent = create_react_agent(llm, tools, prompt)
-    agent_executor = AgentExecutor(
-        agent=agent, 
-        tools=tools, 
-        verbose=True, 
-        handle_parsing_errors=True
-    )
+    agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=True, handle_parsing_errors=True)
 
-    # File Upload Widget
-    uploaded_file = st.file_uploader("Upload a screenshot (JPG, PNG, JFIF)", type=["jpg", "jpeg", "png", "jfif"])
+    # 4. App Logic
+    uploaded_file = st.file_uploader("Upload screenshot", type=["jpg", "png", "jpeg"])
 
-    if uploaded_file is not None:
-        st.image(uploaded_file, caption='Uploaded Screenshot', use_container_width=True)
+    if uploaded_file:
+        st.image(uploaded_file, caption="Target Image", use_container_width=True)
         
-        if st.button("Analyze Expense"):
-            with st.spinner('Agent is processing your receipt...'):
+        if st.button("Analyze Now"):
+            with st.spinner("Agent is working..."):
                 try:
-                    # Pass the file object to the agent
-                    response = agent_executor.invoke({
-                        "input": f"Analyze this transaction image: {uploaded_file}. Tell me the amount, category, and advice."
+                    # We invoke the agent with the file object
+                    result = agent_executor.invoke({
+                        "input": f"Use your tools to analyze this image: {uploaded_file}. Give me a summary of spend, category, and advice."
                     })
-                    st.success("### Analysis Result")
-                    st.write(response["output"])
+                    st.success("### Analysis Complete")
+                    st.write(result["output"])
                 except Exception as e:
-                    st.error(f"Error: {e}")
+                    st.error(f"Error processing agent: {e}")
