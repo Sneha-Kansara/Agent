@@ -7,7 +7,7 @@ import os
 # --- GOOGLE GEMINI IMPORTS (2026) ---
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_classic.agents import AgentExecutor, create_react_agent
-from langchainhub import pull 
+import langchainhub as hub 
 from langchain_core.tools import Tool
 
 # --- CUSTOM FINANCE TOOLS ---
