@@ -4,8 +4,8 @@ from PIL import Image
 import re
 import os
 
-# --- MODERN 2026 IMPORTS ---
-from langsmith import Client  # Modern Hub access
+# --- STABLE 2026 IMPORTS ---
+from langsmith import Client
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_classic.agents import AgentExecutor, create_react_agent
 from langchain_core.tools import Tool
@@ -13,13 +13,12 @@ from langchain_core.tools import Tool
 # --- FINANCE TOOLS ---
 
 def ocr_tool(image_file):
-    """Step 1: Extract text from the image."""
+    """Extracts text from the image using Tesseract."""
     img = Image.open(image_file)
-    text = pytesseract.image_to_string(img)
-    return text
+    return pytesseract.image_to_string(img)
 
 def expense_tool(text):
-    """Step 2: Parse text for amount and category."""
+    """Parses text for amount and category."""
     amount_match = re.search(r'\d+', text)
     amount = amount_match.group() if amount_match else "Unknown"
     
@@ -34,9 +33,9 @@ def expense_tool(text):
     return f"Amount: ₹{amount}, Category: {category}"
 
 def advice_tool(category):
-    """Step 3: Provide financial advice."""
+    """Provides financial advice."""
     advice_map = {
-        "Food/Groceries": "Meal planning can save you a lot on delivery fees!",
+        "Food/Groceries": "Planning meals ahead can save you a lot on delivery fees!",
         "Transport": "Check for monthly passes to save on commute costs.",
         "Miscellaneous": "Small spends add up—track these for a week."
     }
@@ -44,9 +43,9 @@ def advice_tool(category):
 
 # --- STREAMLIT UI ---
 
-st.set_page_config(page_title="Gemini Finance Agent", page_icon="💰")
+st.set_page_config(page_title="AI Finance Agent", page_icon="💰")
 st.title("💰 AI Finance Agent")
-st.markdown("Powered by **Google Gemini** & LangSmith.")
+st.markdown("Powered by **Google Gemini**.")
 
 # Sidebar for API Key
 gemini_key = st.sidebar.text_input("Enter Gemini API Key", type="password")
@@ -58,7 +57,8 @@ if not gemini_key:
     st.info("Please enter your Gemini API Key in the sidebar.", icon="🗝️")
 else:
     try:
-        # 1. Initialize Gemini Model (Free Tier)
+        # 1. Initialize Gemini Model 
+        # FIX: Using the string name directly usually resolves the v1beta 404
         llm = ChatGoogleGenerativeAI(
             model="gemini-1.5-flash", 
             google_api_key=gemini_key,
@@ -72,7 +72,7 @@ else:
             Tool(name="Advisor", func=advice_tool, description="Provides financial advice.")
         ]
 
-        # 3. Pull Prompt (Using Modern LangSmith Client)
+        # 3. Pull Prompt (Using LangSmith client)
         client = Client()
         prompt = client.pull_prompt("hwchase17/react")
         
@@ -99,8 +99,10 @@ if uploaded_file and agent_executor:
         with st.spinner("Analyzing..."):
             try:
                 # Process the file via the Agent
+                # We send the OCR text result to help the agent context
+                raw_text = ocr_tool(uploaded_file)
                 result = agent_executor.invoke({
-                    "input": f"Analyze this image: {uploaded_file}. Identify amount, category, and give advice."
+                    "input": f"Analyze this text from a receipt: {raw_text}. Identify amount, category, and give advice."
                 })
                 st.success("### Analysis Result")
                 st.write(result["output"])
