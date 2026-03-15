@@ -7,7 +7,7 @@ import os
 # --- STABLE PRODUCTION IMPORTS (2026) ---
 # We use 'langchain_classic' to guarantee the AgentExecutor works on Streamlit Cloud
 from langchain_classic.agents import AgentExecutor, create_react_agent
-from langchain import hub
+import langchainhub as hub
 from langchain_core.tools import Tool
 from langchain_openai import ChatOpenAI
 
