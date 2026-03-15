@@ -2,8 +2,8 @@ streamlit
 langchain>=0.3.0
 langchain-openai
 langchain-community
-langchainhub
+langchainhub        # <--- THIS IS THE FIX
 langgraph
-langchain-classic  # <--- Add this!
+langchain-classic
 pytesseract
 pillow
