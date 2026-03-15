@@ -7,6 +7,11 @@ import os
 # --- STABLE 2026 IMPORTS ---
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_classic.agents import AgentExecutor, create_react_agent
+
+# The definitive import for 'pull' in v1.0+ environments
+from langchain_classic import hub
+# Usage later will be: hub.pull("hwchase17/react")
+
 from langchain_core.tools import Tool
 
 # Robust Hub Import for Streamlit Cloud
