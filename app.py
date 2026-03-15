@@ -13,7 +13,8 @@ from langchain_core.tools import Tool
 try:
     from langchainhub import pull
 except ImportError:
-    from langchain.hub import pull
+   # Modern 2026 standard for pulling prompts
+from langchainhub import pull
 
 # --- CUSTOM FINANCE TOOLS ---
 
@@ -82,7 +83,11 @@ else:
 
         # 3. Pull ReAct Prompt and Build Agent
         # We imported 'pull' directly, so we call it directly here
-        prompt = pull("hwchase17/react")
+       # Before (Old/Broken)
+prompt = hub.pull("hwchase17/react")
+
+# After (New/Working)
+prompt = pull("hwchase17/react")
         agent = create_react_agent(llm, tools, prompt)
         agent_executor = AgentExecutor(
             agent=agent, 
