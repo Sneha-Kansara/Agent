@@ -4,7 +4,7 @@ from PIL import Image
 import re
 import os
 
-# --- STABLE 2026 IMPORTS ---
+# --- MODERN 2026 IMPORTS ---
 from langsmith import Client
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_classic.agents import AgentExecutor, create_react_agent
@@ -35,17 +35,17 @@ def expense_tool(text):
 def advice_tool(category):
     """Provides financial advice."""
     advice_map = {
-        "Food/Groceries": "Planning meals ahead can save you a lot on delivery fees!",
+        "Food/Groceries": "Meal planning can save you a lot on delivery fees!",
         "Transport": "Check for monthly passes to save on commute costs.",
         "Miscellaneous": "Small spends add up—track these for a week."
     }
-    return advice_map.get(category, "Review your spending to find saving gaps.")
+    return advice_map.get(category, "Review your daily spending to find saving gaps.")
 
 # --- STREAMLIT UI ---
 
 st.set_page_config(page_title="AI Finance Agent", page_icon="💰")
 st.title("💰 AI Finance Agent")
-st.markdown("Powered by **Google Gemini**.")
+st.markdown("Powered by **Gemini 2.5 Flash**.")
 
 # Sidebar for API Key
 gemini_key = st.sidebar.text_input("Enter Gemini API Key", type="password")
@@ -58,9 +58,9 @@ if not gemini_key:
 else:
     try:
         # 1. Initialize Gemini Model 
-        # FIX: Using the string name directly usually resolves the v1beta 404
+        # FIX: Updated to gemini-2.5-flash for 2026 compatibility
         llm = ChatGoogleGenerativeAI(
-            model="gemini-1.5-flash", 
+            model="gemini-2.5-flash", 
             google_api_key=gemini_key,
             temperature=0
         )
@@ -98,8 +98,7 @@ if uploaded_file and agent_executor:
     if st.button("Run Financial Analysis"):
         with st.spinner("Analyzing..."):
             try:
-                # Process the file via the Agent
-                # We send the OCR text result to help the agent context
+                # Process: OCR -> Agent Analysis
                 raw_text = ocr_tool(uploaded_file)
                 result = agent_executor.invoke({
                     "input": f"Analyze this text from a receipt: {raw_text}. Identify amount, category, and give advice."
