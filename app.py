@@ -7,7 +7,8 @@ import os
 # --- STABLE PRODUCTION IMPORTS (2026) ---
 # We use 'langchain_classic' to guarantee the AgentExecutor works on Streamlit Cloud
 from langchain_classic.agents import AgentExecutor, create_react_agent
-import langchainhub as hub
+# Instead of 'import langchainhub as hub', use the direct function import
+from langchainhub import pull
 from langchain_core.tools import Tool
 from langchain_openai import ChatOpenAI
 
@@ -69,7 +70,8 @@ else:
     ]
 
     # 3. Setup Agent
-    prompt = hub.pull("hwchase17/react")
+    # Remove the 'hub.' prefix since we imported the function directly
+prompt = pull("hwchase17/react")
     agent = create_react_agent(llm, tools, prompt)
     agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=True, handle_parsing_errors=True)
 
