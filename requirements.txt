@@ -2,6 +2,7 @@ streamlit
 langchain>=0.3.0
 langchain-openai
 langchain-community
-langgraph>=0.2.0  # Add this! It's needed for create_react_agent now
+langchainhub
+langgraph
 pytesseract
 pillow
