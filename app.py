@@ -8,7 +8,10 @@ import os
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_classic.agents import AgentExecutor, create_react_agent
 from langchain_core.tools import Tool
-from langchainhub import pull  # Clean, direct import
+
+# THE DEFINITIVE FIX FOR THE IMPORT ERROR:
+import langchainhub 
+# We will use langchainhub.pull() directly later
 
 # --- CUSTOM FINANCE TOOLS ---
 
@@ -73,7 +76,7 @@ else:
         ]
 
         # 3. Pull Prompt & Build Agent
-        prompt = pull("hwchase17/react")
+       prompt = langchainhub.pull("hwchase17/react")
         agent = create_react_agent(llm, tools, prompt)
         agent_executor = AgentExecutor(
             agent=agent, 
