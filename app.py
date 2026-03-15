@@ -4,20 +4,11 @@ from PIL import Image
 import re
 import os
 
-# --- ROBUST PRODUCTION IMPORTS (MARCH 2026) ---
-# We use a multi-path import for 'pull' to handle all possible library versions
-try:
-    from langchainhub import pull
-except ImportError:
-    try:
-        from langchain.hub import pull
-    except ImportError:
-        # Final fallback for langchain-classic users
-        from langchain_classic.hub import pull
-
+# --- GOOGLE GEMINI IMPORTS (2026) ---
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_classic.agents import AgentExecutor, create_react_agent
+from langchainhub import pull 
 from langchain_core.tools import Tool
-from langchain_openai import ChatOpenAI
 
 # --- CUSTOM FINANCE TOOLS ---
 
@@ -47,27 +38,32 @@ def expense_tool(text):
 def advice_tool(category):
     """Step 3: Provide advice based on the category."""
     advice_map = {
-        "Food": "Consider cooking at home to save on delivery fees.",
-        "Transport": "Check if a monthly pass or public transport is cheaper.",
-        "Shopping": "Ask yourself if this was a 'need' or a 'want' before buying.",
-        "Others": "Keep tracking these to see where small leaks occur."
+        "Food": "Cook at home to save on delivery fees this week!",
+        "Transport": "Check if a monthly pass or carpool is cheaper.",
+        "Shopping": "Wait 24 hours before buying non-essentials.",
+        "Others": "Review these small costs; they add up fast!"
     }
     return advice_map.get(category, "Always review your expenses weekly.")
 
 # --- STREAMLIT UI ---
 
-st.set_page_config(page_title="AI Finance Agent", page_icon="🏦")
-st.title("🏦 AI Finance Agent")
-st.markdown("Upload a payment screenshot to get analysis and advice.")
+st.set_page_config(page_title="Free AI Finance Agent", page_icon="🏦")
+st.title("🏦 AI Finance Agent (Powered by Gemini)")
+st.markdown("Analyze your payment screenshots for **free** using Google Gemini.")
 
-# Secure API Key Entry
-api_key = st.sidebar.text_input("OpenAI API Key", type="password")
+# Sidebar for Gemini Key
+gemini_key = st.sidebar.text_input("Enter Gemini API Key", type="password")
 
-if not api_key:
-    st.info("Please enter your OpenAI API Key in the sidebar to start.", icon="🗝️")
+if not gemini_key:
+    st.info("Get your free key at [Google AI Studio](https://aistudio.google.com/)", icon="🗝️")
 else:
-    # 1. Initialize LLM
-    llm = ChatOpenAI(model="gpt-3.5-turbo", temperature=0, openai_api_key=api_key)
+    # 1. Initialize Gemini Model
+    # 'gemini-1.5-flash' is fast and free
+    llm = ChatGoogleGenerativeAI(
+        model="gemini-1.5-flash", 
+        google_api_key=gemini_key,
+        temperature=0
+    )
 
     # 2. Define Tools
     tools = [
@@ -78,7 +74,6 @@ else:
 
     # 3. Setup Agent
     try:
-        # pull() is now imported directly from the top section
         prompt = pull("hwchase17/react")
         agent = create_react_agent(llm, tools, prompt)
         agent_executor = AgentExecutor(
@@ -97,11 +92,11 @@ else:
         st.image(uploaded_file, caption="Target Screenshot", use_container_width=True)
         
         if st.button("Analyze Spend"):
-            with st.spinner("Agent is working..."):
+            with st.spinner("Gemini is thinking..."):
                 try:
-                    # Invoke the agent executor
+                    # Agent invoke
                     result = agent_executor.invoke({
-                        "input": f"Use your tools to analyze this image: {uploaded_file}. Summarize spend, category, and advice."
+                        "input": f"Analyze this image: {uploaded_file}. Summarize spend, category, and advice."
                     })
                     st.success("### Analysis Complete")
                     st.write(result["output"])
