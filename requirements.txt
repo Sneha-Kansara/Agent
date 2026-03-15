@@ -1,8 +1,7 @@
 streamlit
 langchain>=0.3.0
 langchain-google-genai
-langchain-community
-langchainhub>=0.1.20
+langsmith>=0.1.99
 langchain-classic
 pytesseract
 pillow
