@@ -5,27 +5,50 @@ import re
 import os
 
 # --- MODERN 2026 IMPORTS ---
-import langchainhub
+from langsmith import Client  # Modern Hub access
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_classic.agents import AgentExecutor, create_react_agent
 from langchain_core.tools import Tool
 
-# --- TOOLS ---
+# --- FINANCE TOOLS ---
+
 def ocr_tool(image_file):
+    """Step 1: Extract text from the image."""
     img = Image.open(image_file)
-    return pytesseract.image_to_string(img)
+    text = pytesseract.image_to_string(img)
+    return text
 
 def expense_tool(text):
-    amount = re.search(r'\d+', text).group() if re.search(r'\d+', text) else "Unknown"
-    return f"Amount: ₹{amount}, Category: Analyzed"
+    """Step 2: Parse text for amount and category."""
+    amount_match = re.search(r'\d+', text)
+    amount = amount_match.group() if amount_match else "Unknown"
+    
+    text_lower = text.lower()
+    if any(k in text_lower for k in ["swiggy", "zomato", "food", "blinkit"]):
+        category = "Food/Groceries"
+    elif any(k in text_lower for k in ["uber", "ola", "rapido", "petrol"]):
+        category = "Transport"
+    else:
+        category = "Miscellaneous"
+        
+    return f"Amount: ₹{amount}, Category: {category}"
 
 def advice_tool(category):
-    return "Great tracking! Small savings today lead to big wealth tomorrow."
+    """Step 3: Provide financial advice."""
+    advice_map = {
+        "Food/Groceries": "Meal planning can save you a lot on delivery fees!",
+        "Transport": "Check for monthly passes to save on commute costs.",
+        "Miscellaneous": "Small spends add up—track these for a week."
+    }
+    return advice_map.get(category, "Review your spending to find saving gaps.")
 
-# --- UI SETUP ---
-st.set_page_config(page_title="AI Finance Agent", page_icon="💰")
+# --- STREAMLIT UI ---
+
+st.set_page_config(page_title="Gemini Finance Agent", page_icon="💰")
 st.title("💰 AI Finance Agent")
+st.markdown("Powered by **Google Gemini** & LangSmith.")
 
+# Sidebar for API Key
 gemini_key = st.sidebar.text_input("Enter Gemini API Key", type="password")
 
 # Pre-initialize agent_executor
@@ -35,13 +58,13 @@ if not gemini_key:
     st.info("Please enter your Gemini API Key in the sidebar.", icon="🗝️")
 else:
     try:
-        # 1. Initialize Gemini
+        # 1. Initialize Gemini Model (Free Tier)
         llm = ChatGoogleGenerativeAI(
             model="gemini-1.5-flash", 
             google_api_key=gemini_key,
             temperature=0
         )
-        
+
         # 2. Define Tools
         tools = [
             Tool(name="OCR", func=ocr_tool, description="Reads text from images."),
@@ -49,8 +72,9 @@ else:
             Tool(name="Advisor", func=advice_tool, description="Provides financial advice.")
         ]
 
-        # 3. Pull Prompt (Check Indentation Here)
-        prompt = langchainhub.pull("hwchase17/react")
+        # 3. Pull Prompt (Using Modern LangSmith Client)
+        client = Client()
+        prompt = client.pull_prompt("hwchase17/react")
         
         # 4. Create Agent
         agent = create_react_agent(llm, tools, prompt)
@@ -64,16 +88,21 @@ else:
     except Exception as e:
         st.error(f"Initialization Error: {e}")
 
-# --- MAIN APP ---
-uploaded_file = st.file_uploader("Upload screenshot (JPG, PNG)", type=["jpg", "png", "jpeg"])
+# --- MAIN APP LOGIC ---
+
+uploaded_file = st.file_uploader("Upload payment screenshot", type=["jpg", "png", "jpeg"])
 
 if uploaded_file and agent_executor:
-    st.image(uploaded_file, use_container_width=True)
+    st.image(uploaded_file, caption="Uploaded Image", use_container_width=True)
     
-    if st.button("Run Analysis"):
+    if st.button("Run Financial Analysis"):
         with st.spinner("Analyzing..."):
             try:
-                response = agent_executor.invoke({"input": f"Analyze this file: {uploaded_file}"})
-                st.success(response["output"])
+                # Process the file via the Agent
+                result = agent_executor.invoke({
+                    "input": f"Analyze this image: {uploaded_file}. Identify amount, category, and give advice."
+                })
+                st.success("### Analysis Result")
+                st.write(result["output"])
             except Exception as e:
                 st.error(f"Execution Error: {e}")
