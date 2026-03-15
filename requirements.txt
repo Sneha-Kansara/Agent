@@ -1,5 +1,5 @@
 streamlit
-langchain>=1.0.0
+langchain>=0.3.0
 langchain-google-genai
 langchainhub
 langgraph
