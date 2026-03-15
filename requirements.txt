@@ -1,8 +1,8 @@
 streamlit
 langchain>=0.3.0
-langchain-openai
+langchain-google-genai
 langchain-community
-langchainhub        # <--- THIS IS THE FIX
+langchainhub
 langgraph
 langchain-classic
 pytesseract
