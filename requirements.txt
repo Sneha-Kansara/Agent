@@ -4,5 +4,6 @@ langchain-openai
 langchain-community
 langchainhub
 langgraph
+langchain-classic  # <--- Add this!
 pytesseract
 pillow
