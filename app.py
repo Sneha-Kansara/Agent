@@ -69,11 +69,9 @@ else:
             model="gemini-2.5-flash-lite", 
             google_api_key=gemini_key,
             temperature=0,
-            max_retries=6,  # AUTO-RETRY ON 429 ERRORS
+            max_retries=6,
             timeout=60
         )
-
-
 
         # 2. Define Tools
         tools = [
@@ -84,26 +82,26 @@ else:
             Tool(name="Guru Advice", func=guru_advice_tool, description="Financial guru advice")
         ]
 
-        # 3. Setup Agent
-from langchain_core.prompts import PromtTemplate 
+        # 3. Setup Agent (FIXED)
+        from langchain_core.prompts import PromptTemplate
 
-    prompt_template = """Answer the following questions...
-    """
+        prompt_template = """Answer the following questions...
+        """
 
-    prompt = PromptTemplate.from_template(prompt_template)
+        prompt = PromptTemplate.from_template(prompt_template)
 
-    agent = create_react_agent(llm, tools, prompt)
+        agent = create_react_agent(llm, tools, prompt)
 
-    agent_executor = AgentExecutor(
-        agent=agent,
-        tools=tools,
-        verbose=True,
-        handle_parsing_errors=True,
-        max_iterations=5
-    )
+        agent_executor = AgentExecutor(
+            agent=agent,
+            tools=tools,
+            verbose=True,
+            handle_parsing_errors=True,
+            max_iterations=5
+        )
+
     except Exception as e:
         st.error(f"Initialization Error: {e}")
-
 # ---------------- MAIN UI ----------------
 
 option = st.selectbox(
