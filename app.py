@@ -85,7 +85,7 @@ else:
         ]
 
         # 3. Setup Agent
- from langchain_core.prompts import PromptTemplate
+from langchain_core.prompts import PromtTemplate 
 
     prompt_template = """Answer the following questions...
     """
