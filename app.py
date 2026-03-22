@@ -65,11 +65,15 @@ if not gemini_key:
 else:
     try:
         # 1. Initialize Gemini
-        llm = ChatGoogleGenerativeAI(
-            model="gemini-1.5-flash",
+               llm = ChatGoogleGenerativeAI(
+            model="gemini-2.5-flash-lite", 
             google_api_key=gemini_key,
-            temperature=0
+            temperature=0,
+            max_retries=6,  # AUTO-RETRY ON 429 ERRORS
+            timeout=60
         )
+
+
 
         # 2. Define Tools
         tools = [
