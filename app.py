@@ -77,11 +77,8 @@ else:
             Tool(name="OCR", func=ocr_tool, description="Extracts text from images."),
             Tool(name="Analyzer", func=expense_tool, description="Finds amount and category."),
             Tool(name="Advisor", func=advice_tool, description="Provides advice."),
-            tools.append(
             Tool( name="Budget Tool", func=budgeting_tool,description="Gives budgeting advice"),
-)tools.append(
             Tool(name="Guru Advice",func=guru_advice_tool,description="Financial guru advice" )
-)
         ]
 
         # 3. Setup Agent
