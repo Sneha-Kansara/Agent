@@ -2,91 +2,174 @@ import streamlit as st
 import pytesseract
 from PIL import Image
 import re
+import os
+import pandas as pd
 
-# --- MODERN 2026 IMPORTS ---
-from langsmith import Client
+# LangChain imports
+from langchain.tools import Tool
+from langchain.agents import initialize_agent, AgentType
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_classic.agents import AgentExecutor, create_react_agent
-from langchain_core.tools import Tool
 
-# --- FINANCE TOOLS ---
-def ocr_tool(image_file):
-    img = Image.open(image_file)
-    return pytesseract.image_to_string(img)
+# ---------------- API KEY ----------------
+os.environ["GOOGLE_API_KEY"] = "YOUR_GEMINI_API_KEY"
+
+# ---------------- LLM ----------------
+llm = ChatGoogleGenerativeAI(
+    model="gemini-1.5-flash",  # change if needed based on your API
+    temperature=0
+)
+
+# ---------------- TOOLS ----------------
 
 def expense_tool(text):
     amount_match = re.search(r'\d+', text)
-    amount = amount_match.group() if amount_match else "Unknown"
-    
-    text_lower = text.lower()
-    if any(k in text_lower for k in ["swiggy", "zomato", "food", "blinkit"]):
-        category = "Food/Groceries"
-    elif any(k in text_lower for k in ["uber", "ola", "rapido", "petrol"]):
+    amount = int(amount_match.group()) if amount_match else 0
+
+    text = text.lower()
+
+    if "swiggy" in text or "zomato" in text:
+        category = "Food"
+    elif "uber" in text or "ola" in text:
         category = "Transport"
+    elif "amazon" in text or "flipkart" in text:
+        category = "Shopping"
     else:
-        category = "Miscellaneous"
+        category = "Others"
+
     return f"Amount: ₹{amount}, Category: {category}"
 
+
 def advice_tool(category):
-    return "Great tracking! Small savings today lead to big wealth tomorrow."
+    advice = {
+        "Food": "Reduce online food orders to save money.",
+        "Transport": "Use public transport when possible.",
+        "Shopping": "Avoid impulse buying.",
+        "Others": "Track your expenses regularly."
+    }
+    return advice.get(category, "Track your spending.")
 
-# --- UI SETUP ---
-st.set_page_config(page_title="AI Finance Agent", page_icon="💰")
-st.title("💰 AI Finance Agent")
 
-gemini_key = st.sidebar.text_input("Enter Gemini API Key", type="password")
-agent_executor = None
+def budgeting_tool(total):
+    total = int(total)
 
-if not gemini_key:
-    st.info("Please enter your Gemini API Key in the sidebar.", icon="🗝️")
-else:
-    try:
-        # 1. Initialize Gemini Flash-Lite (Faster & higher limits)
-        llm = ChatGoogleGenerativeAI(
-            model="gemini-2.5-flash-lite", 
-            google_api_key=gemini_key,
-            temperature=0,
-            max_retries=6,  # AUTO-RETRY ON 429 ERRORS
-            timeout=60
-        )
+    if total > 10000:
+        return "⚠️ You are overspending!"
+    elif total > 5000:
+        return "⚠️ You are close to budget limit."
+    else:
+        return "✅ Your spending is under control."
 
-        # 2. Define Tools
-        tools = [
-            Tool(name="OCR", func=ocr_tool, description="Extracts text from images."),
-            Tool(name="Analyzer", func=expense_tool, description="Finds amount and category."),
-            Tool(name="Advisor", func=advice_tool, description="Provides advice.")
-        ]
 
-        # 3. Setup Agent
-        client = Client()
-        prompt = client.pull_prompt("hwchase17/react")
-        agent = create_react_agent(llm, tools, prompt)
-        agent_executor = AgentExecutor(
-            agent=agent, 
-            tools=tools, 
-            verbose=True, 
-            handle_parsing_errors=True,
-            max_iterations=5  # Prevent runaway loops that waste quota
-        )
-    except Exception as e:
-        st.error(f"Initialization Error: {e}")
+def guru_advice_tool(category):
+    guru = {
+        "Food": "Warren Buffett: Save first, spend later.",
+        "Shopping": "Ramit Sethi: Spend consciously.",
+        "Transport": "Avoid unnecessary lifestyle inflation.",
+        "Others": "Track every rupee you spend."
+    }
+    return guru.get(category, "Invest wisely.")
 
-# --- MAIN LOGIC ---
-uploaded_file = st.file_uploader("Upload screenshot", type=["jpg", "png", "jpeg"])
+# ---------------- TOOLS LIST ----------------
 
-if uploaded_file and agent_executor:
-    st.image(uploaded_file, use_container_width=True)
-    
-    if st.button("Analyze Now"):
-        with st.spinner("Processing... (Waiting for quota if needed)"):
-            try:
-                # Pre-run OCR to save one agent loop/request
-                extracted_text = ocr_tool(uploaded_file)
-                
-                result = agent_executor.invoke({
-                    "input": f"Analyze this receipt text: '{extracted_text}'. Get amount, category, and advice."
-                })
-                st.success("### Analysis Result")
-                st.write(result["output"])
-            except Exception as e:
-                st.error(f"Execution Error: {e}")
+tools = [
+    Tool(name="Expense Analyzer", func=expense_tool,
+         description="Extract amount and category"),
+    Tool(name="Financial Advisor", func=advice_tool,
+         description="Provide advice"),
+    Tool(name="Budget Tool", func=budgeting_tool,
+         description="Budget advice"),
+    Tool(name="Guru Advice", func=guru_advice_tool,
+         description="Financial guru advice")
+]
+
+# ---------------- AGENT ----------------
+
+agent = initialize_agent(
+    tools,
+    llm,
+    agent=AgentType.ZERO_SHOT_REACT_DESCRIPTION,
+    verbose=False
+)
+
+# ---------------- STREAMLIT UI ----------------
+
+st.title("💰 AI Financial Advisor & Expense Manager")
+
+# Input type selection
+option = st.selectbox(
+    "Select Input Type",
+    ["Upload Screenshot", "Manual Entry", "CSV Upload"]
+)
+
+expenses = []
+categories = []
+
+# ---------------- SCREENSHOT ----------------
+if option == "Upload Screenshot":
+
+    uploaded_file = st.file_uploader("Upload Screenshot", type=["png", "jpg", "jpeg"])
+
+    if uploaded_file:
+        image = Image.open(uploaded_file)
+        st.image(image, caption="Uploaded Image")
+
+        text = pytesseract.image_to_string(image)
+
+        st.subheader("Extracted Text")
+        st.write(text)
+
+        result = agent.run(text)
+        st.subheader("AI Analysis")
+        st.write(result)
+
+# ---------------- MANUAL ENTRY ----------------
+elif option == "Manual Entry":
+
+    user_input = st.text_input("Enter expense (e.g., Paid ₹300 to Swiggy)")
+
+    if user_input:
+        result = agent.run(user_input)
+        st.write(result)
+
+        amount_match = re.search(r'\d+', user_input)
+        amount = int(amount_match.group()) if amount_match else 0
+
+        expenses.append(amount)
+
+        if "swiggy" in user_input.lower():
+            categories.append("Food")
+        else:
+            categories.append("Others")
+
+# ---------------- CSV ----------------
+elif option == "CSV Upload":
+
+    file = st.file_uploader("Upload CSV", type=["csv"])
+
+    if file:
+        df = pd.read_csv(file)
+        st.write(df)
+
+        if "Amount" in df.columns:
+            total = df["Amount"].sum()
+            st.write("Total Spending:", total)
+
+# ---------------- DASHBOARD ----------------
+
+if expenses:
+
+    st.subheader("📊 Spending Analysis")
+
+    df = pd.DataFrame({
+        "Category": categories,
+        "Amount": expenses
+    })
+
+    summary = df.groupby("Category").sum()
+
+    st.bar_chart(summary)
+
+    total_spending = sum(expenses)
+
+    st.subheader("💡 Budget Status")
+    st.write(budgeting_tool(total_spending))
