@@ -2,6 +2,7 @@ import streamlit as st
 import pytesseract
 from PIL import Image
 import re
+import pandas as pd
 
 # --- MODERN 2026 IMPORTS ---
 from langsmith import Client
@@ -25,6 +26,7 @@ def expense_tool(text):
         category = "Transport"
     else:
         category = "Miscellaneous"
+
     return f"Amount: ₹{amount}, Category: {category}"
 
 def advice_tool(category):
@@ -41,7 +43,6 @@ def budgeting_tool(total):
         return "⚠️ You are near your budget limit."
     else:
         return "✅ Your spending is under control."
-
 
 def guru_advice_tool(category):
     guru = {
@@ -63,13 +64,11 @@ if not gemini_key:
     st.info("Please enter your Gemini API Key in the sidebar.", icon="🗝️")
 else:
     try:
-        # 1. Initialize Gemini Flash-Lite (Faster & higher limits)
+        # 1. Initialize Gemini
         llm = ChatGoogleGenerativeAI(
-            model="gemini-2.5-flash-lite", 
+            model="gemini-1.5-flash",
             google_api_key=gemini_key,
-            temperature=0,
-            max_retries=6,  # AUTO-RETRY ON 429 ERRORS
-            timeout=60
+            temperature=0
         )
 
         # 2. Define Tools
@@ -77,50 +76,83 @@ else:
             Tool(name="OCR", func=ocr_tool, description="Extracts text from images."),
             Tool(name="Analyzer", func=expense_tool, description="Finds amount and category."),
             Tool(name="Advisor", func=advice_tool, description="Provides advice."),
-            Tool( name="Budget Tool", func=budgeting_tool,description="Gives budgeting advice"),
-            Tool(name="Guru Advice",func=guru_advice_tool,description="Financial guru advice" )
+            Tool(name="Budget Tool", func=budgeting_tool, description="Gives budgeting advice"),
+            Tool(name="Guru Advice", func=guru_advice_tool, description="Financial guru advice")
         ]
 
         # 3. Setup Agent
         client = Client()
         prompt = client.pull_prompt("hwchase17/react")
+
         agent = create_react_agent(llm, tools, prompt)
+
         agent_executor = AgentExecutor(
-            agent=agent, 
-            tools=tools, 
-            verbose=True, 
+            agent=agent,
+            tools=tools,
+            verbose=True,
             handle_parsing_errors=True,
-            max_iterations=5  # Prevent runaway loops that waste quota
+            max_iterations=5
         )
+
     except Exception as e:
         st.error(f"Initialization Error: {e}")
 
-# --- MAIN LOGIC ---
+# ---------------- MAIN UI ----------------
+
 option = st.selectbox(
     "Select Input Type",
     ["Screenshot", "Manual Entry", "CSV Upload"]
 )
-uploaded_file = st.file_uploader("Upload screenshot", type=["jpg", "png", "jpeg"])
+
+# -------- SCREENSHOT --------
 if option == "Screenshot":
-    uploaded_file = st.file_uploader("Upload Screenshot")
-if uploaded_file and agent_executor:
-    st.image(uploaded_file, use_container_width=True)
-    elif option == "Manual Entry":
+    uploaded_file = st.file_uploader("Upload Screenshot", type=["jpg", "png", "jpeg"])
+
+    if uploaded_file and agent_executor:
+        st.image(uploaded_file, use_container_width=True)
+
+        if st.button("Analyze Now"):
+            with st.spinner("Processing..."):
+                try:
+                    extracted_text = ocr_tool(uploaded_file)
+
+                    result = agent_executor.invoke({
+                        "input": f"Analyze this receipt text: '{extracted_text}'. Get amount, category, and advice."
+                    })
+
+                    st.success("### Analysis Result")
+                    st.write(result["output"])
+
+                except Exception as e:
+                    st.error(f"Execution Error: {e}")
+
+# -------- MANUAL ENTRY --------
+elif option == "Manual Entry":
     user_input = st.text_input("Enter expense (e.g., Paid ₹300 to Swiggy)")
-    if user_input:
-        result = agent.run(user_input)
-        st.write("AI Analysis:", result)
-        elif option == "CSV Upload":
+
+    if user_input and agent_executor:
+        try:
+            result = agent_executor.invoke({
+                "input": f"Analyze this text: '{user_input}'"
+            })
+            st.write(result["output"])
+        except Exception as e:
+            st.error(f"Error: {e}")
+
+# -------- CSV --------
+elif option == "CSV Upload":
     csv_file = st.file_uploader("Upload CSV", type=["csv"])
+
     if csv_file:
-        import pandas as pd
         df = pd.read_csv(csv_file)
         st.write("Uploaded Data:", df)
+
         if "Amount" in df.columns:
             total = df["Amount"].sum()
             st.write("Total Spending:", total)
             st.write("Budget Advice:", budgeting_tool(total))
-           
+
+# -------- CHART --------
 sample_data = pd.DataFrame({
     "Category": ["Food", "Shopping", "Transport"],
     "Amount": [2000, 1500, 1000]
@@ -128,17 +160,3 @@ sample_data = pd.DataFrame({
 
 st.subheader("📊 Spending Overview")
 st.bar_chart(sample_data.set_index("Category"))
-    
-    if st.button("Analyze Now"):
-        with st.spinner("Processing... (Waiting for quota if needed)"):
-            try:
-                # Pre-run OCR to save one agent loop/request
-                extracted_text = ocr_tool(uploaded_file)
-                
-                result = agent_executor.invoke({
-                    "input": f"Analyze this receipt text: '{extracted_text}'. Get amount, category, and advice."
-                })
-                st.success("### Analysis Result")
-                st.write(result["output"])
-            except Exception as e:
-                st.error(f"Execution Error: {e}")
