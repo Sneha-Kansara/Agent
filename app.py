@@ -30,6 +30,28 @@ def expense_tool(text):
 def advice_tool(category):
     return "Great tracking! Small savings today lead to big wealth tomorrow."
 
+# --------- NEW FEATURES ---------
+
+def budgeting_tool(total):
+    total = int(total)
+
+    if total > 10000:
+        return "⚠️ You are overspending!"
+    elif total > 5000:
+        return "⚠️ You are near your budget limit."
+    else:
+        return "✅ Your spending is under control."
+
+
+def guru_advice_tool(category):
+    guru = {
+        "Food": "Warren Buffett: Save before you spend.",
+        "Shopping": "Ramit Sethi: Spend consciously.",
+        "Transport": "Avoid unnecessary expenses.",
+        "Others": "Track every rupee."
+    }
+    return guru.get(category, "Invest wisely.")
+
 # --- UI SETUP ---
 st.set_page_config(page_title="AI Finance Agent", page_icon="💰")
 st.title("💰 AI Finance Agent")
@@ -55,6 +77,21 @@ else:
             Tool(name="OCR", func=ocr_tool, description="Extracts text from images."),
             Tool(name="Analyzer", func=expense_tool, description="Finds amount and category."),
             Tool(name="Advisor", func=advice_tool, description="Provides advice.")
+            tools.append(
+    Tool(
+        name="Budget Tool",
+        func=budgeting_tool,
+        description="Gives budgeting advice"
+    )
+)
+
+tools.append(
+    Tool(
+        name="Guru Advice",
+        func=guru_advice_tool,
+        description="Financial guru advice"
+    )
+)
         ]
 
         # 3. Setup Agent
@@ -72,10 +109,38 @@ else:
         st.error(f"Initialization Error: {e}")
 
 # --- MAIN LOGIC ---
+option = st.selectbox(
+    "Select Input Type",
+    ["Screenshot", "Manual Entry", "CSV Upload"]
+)
 uploaded_file = st.file_uploader("Upload screenshot", type=["jpg", "png", "jpeg"])
-
+if option == "Screenshot":
+    uploaded_file = st.file_uploader("Upload Screenshot")
 if uploaded_file and agent_executor:
     st.image(uploaded_file, use_container_width=True)
+    elif option == "Manual Entry":
+    user_input = st.text_input("Enter expense (e.g., Paid ₹300 to Swiggy)")
+    if user_input:
+        result = agent.run(user_input)
+        st.write("AI Analysis:", result)
+        elif option == "CSV Upload":
+    csv_file = st.file_uploader("Upload CSV", type=["csv"])
+    if csv_file:
+        import pandas as pd
+        df = pd.read_csv(csv_file)
+        st.write("Uploaded Data:", df)
+        if "Amount" in df.columns:
+            total = df["Amount"].sum()
+            st.write("Total Spending:", total)
+            st.write("Budget Advice:", budgeting_tool(total))
+           
+sample_data = pd.DataFrame({
+    "Category": ["Food", "Shopping", "Transport"],
+    "Amount": [2000, 1500, 1000]
+})
+
+st.subheader("📊 Spending Overview")
+st.bar_chart(sample_data.set_index("Category"))
     
     if st.button("Analyze Now"):
         with st.spinner("Processing... (Waiting for quota if needed)"):
