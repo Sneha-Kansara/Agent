@@ -2,9 +2,13 @@ import streamlit as st
 import pandas as pd
 import os
 import base64
+import time
 from datetime import date
+from io import BytesIO
+from PIL import Image
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage
+import google.generativeai as genai
 
 # ─────────────────────────────────────────────
 # PERSISTENCE
@@ -57,7 +61,7 @@ def get_llm():
         st.error("⚠️ Please enter your Gemini API key in the sidebar.")
         st.stop()
     return ChatGoogleGenerativeAI(
-        model="gemini-1.5-flash",
+        model="gemini-2.0-flash-lite",
         google_api_key=st.session_state.api_key
     )
 
@@ -65,13 +69,45 @@ def get_llm():
 # ─────────────────────────────────────────────
 # FEATURE 1 — SCREENSHOT VISION EXTRACTION
 # ─────────────────────────────────────────────
+def resize_image(image_bytes: bytes, max_size: int = 1024) -> tuple[bytes, str]:
+    """Resize image so longest side <= max_size to stay within token limits."""
+    img = Image.open(BytesIO(image_bytes))
+    img.thumbnail((max_size, max_size), Image.LANCZOS)
+    buf = BytesIO()
+    fmt = img.format or "JPEG"
+    if fmt not in ("JPEG", "PNG"):
+        fmt = "JPEG"
+    img.save(buf, format=fmt)
+    mime = "image/png" if fmt == "PNG" else "image/jpeg"
+    return buf.getvalue(), mime
+
+
+def validate_api_key(api_key: str) -> bool:
+    """Quick text-only ping to confirm the key works before sending image."""
+    try:
+        genai.configure(api_key=api_key)
+        m = genai.GenerativeModel("gemini-2.0-flash-lite")
+        m.generate_content("Say OK")
+        return True
+    except Exception:
+        return False
+
+
 def extract_expenses_from_screenshot(image_bytes: bytes, mime_type: str) -> list[dict]:
     """
-    Sends UPI / bank screenshot to Gemini Vision.
+    Sends UPI / bank screenshot to Gemini Vision using the native SDK.
+    Retries up to 3 times with backoff on quota errors.
     Returns a list of dicts: {Date, Amount, Category, Source}
     """
-    llm = get_llm()
-    b64 = base64.b64encode(image_bytes).decode("utf-8")
+    if not st.session_state.api_key:
+        st.error("⚠️ Please enter your Gemini API key in the sidebar.")
+        st.stop()
+
+    # Resize image to avoid token limit issues
+    image_bytes, mime_type = resize_image(image_bytes)
+
+    genai.configure(api_key=st.session_state.api_key)
+    model = genai.GenerativeModel("gemini-2.0-flash-lite")
 
     prompt = """
     You are an expense extraction assistant. Look at this payment/UPI/bank screenshot.
@@ -87,13 +123,41 @@ def extract_expenses_from_screenshot(image_bytes: bytes, mime_type: str) -> list
     [{"Date": "2024-06-01", "Amount": 120.0, "Category": "Food", "Source": "Screenshot"}]
     """
 
-    message = HumanMessage(content=[
-        {"type": "image_url", "image_url": {"url": f"data:{mime_type};base64,{b64}"}},
-        {"type": "text", "text": prompt}
-    ])
+    image_part = {"mime_type": mime_type, "data": image_bytes}
 
-    response = llm.invoke([message])
-    raw = response.content.strip()
+    # Retry up to 3 times with exponential backoff on quota errors
+    for attempt in range(3):
+        try:
+            response = model.generate_content([image_part, prompt])
+            raw = response.text.strip()
+            break  # success — exit retry loop
+        except Exception as e:
+            err = str(e)
+            if "ResourceExhausted" in err or "429" in err:
+                if attempt < 2:
+                    wait = 15 * (attempt + 1)  # 15s, 30s
+                    st.warning(f"⏳ Rate limit hit — retrying in {wait} seconds... (attempt {attempt + 1}/3)")
+                    time.sleep(wait)
+                    continue
+                else:
+                    st.error(
+                        "⚠️ Quota exhausted after 3 retries.\n\n"
+                        "**Likely cause:** Too many requests today on this API key.\n\n"
+                        "**Fix options:**\n"
+                        "1. Wait 24 hours for quota reset\n"
+                        "2. Create a **new Google account** → new API key at aistudio.google.com\n"
+                        "3. Enable billing on your Google Cloud project for higher limits"
+                    )
+                    return []
+            elif "API_KEY_INVALID" in err or "401" in err:
+                st.error("⚠️ Invalid API key. Check the key in the sidebar.")
+                return []
+            elif "NotFound" in err or "404" in err:
+                st.error("⚠️ Model not found. Check your Google Cloud region or API key permissions.")
+                return []
+            else:
+                st.error(f"⚠️ Unexpected error: {err}")
+                return []
 
     # Strip accidental markdown fences
     if raw.startswith("```"):
@@ -103,7 +167,7 @@ def extract_expenses_from_screenshot(image_bytes: bytes, mime_type: str) -> list
     raw = raw.strip()
 
     try:
-        extracted = eval(raw)   # safe here — we control the prompt tightly
+        extracted = eval(raw)
         if isinstance(extracted, list):
             return extracted
     except Exception:
